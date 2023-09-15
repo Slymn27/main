@@ -1,15 +1,9 @@
-
+import 'dart:io';
 import 'package:flutter/material.dart';
 
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart';
-import 'firestore.dart';
-
+import 'firebase_systems/firestore.dart';
+import 'firebase_systems/firebase_connection.dart';
 
 const List<String> list = <String>[
   'Prefere not to say',
@@ -17,7 +11,6 @@ const List<String> list = <String>[
   'Female',
   'Non-Binary',
 ]; //list of the gender options
-
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key, required this.title});
@@ -27,46 +20,26 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
-bool isVegan= false;
+bool isVegan = false;
 bool isStudent = false;
 
 class _ProfilePageState extends State<ProfilePage> {
-  File? profilePicture; // Image variable
+  XFile? profilePicture; // Image variable
   DateTime dateofbirth = DateTime.now(); // dateofbirth variable;
-  DateTime? i;
+  DateTime? date;
   bool veganOrNot = false;
   bool studentOrNot = false;
   String dropdownValue = list.first; // dropdown Menu values
-  Future getProfilePicture(ImageSource sourcepath) async {
-    //get method for getting the profile picture
-    try {
-      final image = await ImagePicker()
-          .pickImage(source: sourcepath); //getting the path of the image
-      if (image == null) return;
+  String? mediaUrl;
+  final Service _service = Service();
 
-      final savedImage = await saveFilePermanently(
-          image.path); //saving the image to the local directory
-      setState(() {
-        profilePicture = savedImage; // changing the profile picture
-      });
-    } on PlatformException catch (e) {
-      if (kDebugMode) {
-        print(
-            'faild to get image: $e'); // showing the error message if we catch an error
-      }
-    }
-  }
-
-  Future<File> saveFilePermanently(String imagePath) async {
-    //method for saving the image to the directory
-    final directory =
-        await getApplicationDocumentsDirectory(); //getting the path
-    final name = basename(imagePath);
-    final image =
-        File('${directory.path}/$name'); //accessing the image by its path
-
-    return File(imagePath).copy(
-        image.path); // finding the image from its path and returning the it
+  uploadMedia(ImageSource source) async {
+    profilePicture = await ImagePicker().pickImage(source: source);
+    if (profilePicture == null) return;
+    mediaUrl =
+        await _service.uploadMedia(File(profilePicture!.path), "UserUniqueID");
+    updateUserImage(mediaUrl.toString());
+    setState(() {});
   }
 
   @override
@@ -98,15 +71,16 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
             ),
             Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              if (profilePicture != null) // if a picture is selected, show it
+              if (mediaUrl != null) // if a picture is selected, show it
                 Stack(alignment: AlignmentDirectional.topEnd, children: [
                   ClipRRect(
                     // making the profile picture circular
                     borderRadius: BorderRadius.circular(100),
-                    child: Image.file(
-                      profilePicture!, // showing the picture that we get from gallery or camera
-                      width: 200, height: 200, fit: BoxFit.cover,
-                    ),
+                    child: mediaUrl == null
+                    ? Image.network(mediaUrl!, // showing the picture that we get from the storage
+                      width: 200, height: 200, fit: BoxFit.cover,)
+                    : Image.network('https://img.freepik.com/free-icon/user_318-644324.jpg',
+                    width: 200, height: 200, fit: BoxFit.cover,)
                   ),
                   Container(
                     margin: const EdgeInsets.only(top: 150, right: 10),
@@ -127,30 +101,16 @@ class _ProfilePageState extends State<ProfilePage> {
                               title:
                                   const Text("Select a format to upload image"),
                               actions: [
-                                IconButton(
-                                  tooltip: 'Gallery',
-                                  onPressed: () =>
-                                      getProfilePicture(ImageSource.gallery),
-                                  icon: const Icon(
-                                    Icons.image,
-                                    size: 42,
-                                  ),
-                                  color: Colors.black,
-                                  highlightColor: Colors.green,
+                                ElevatedButton(
+                                  child: const Text('Gallery'),
+                                  onPressed: () =>uploadMedia(ImageSource.gallery),
                                 ),
                                 const SizedBox(
                                   width: 10,
                                 ),
-                                IconButton(
-                                  tooltip: 'Camera',
-                                  onPressed: () =>
-                                      getProfilePicture(ImageSource.camera),
-                                  icon: const Icon(
-                                    Icons.camera_enhance,
-                                    size: 42,
-                                  ),
-                                  highlightColor: Colors.green,
-                                  color: Colors.black,
+                                ElevatedButton(
+                                  child: const Text('Camera'),
+                                  onPressed: () =>uploadMedia(ImageSource.camera),
                                 ),
                                 const SizedBox(
                                   width: 60,
@@ -158,72 +118,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               ],
                             );
                           });
-                    }, //getProfilePicture(ImageSource.gallery),
-                    child: Container(
-                      decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(100)),
-                      width: 200,
-                      height: 200,
-                    ),
-                  ),
-                ])
-              else //if the profile picture part is empty, showing the empty user image
-                Stack(alignment: AlignmentDirectional.topEnd, children: [
-                  Image.network(
-                      'https://img.freepik.com/free-icon/user_318-644324.jpg', //empty user image
-                      width: 200,
-                      height: 200),
-                  Container(
-                    margin: const EdgeInsets.only(top: 150, right: 10),
-                    decoration: BoxDecoration(
-                        color: Color.fromARGB(180, 67, 176, 104),
-                        border: Border.all(color: Colors.black),
-                        borderRadius: BorderRadius.circular(100)),
-                    width: 35,
-                    height: 35,
-                    child: const Icon(Icons.edit),
-                  ),
-                  GestureDetector(
-                    onTap: () async {
-                      await showDialog(
-                          context: context,
-                          builder: (BuildContext context) {
-                            return AlertDialog(
-                              title:
-                                  const Text("Select a format to upload image"),
-                              actions: [
-                                IconButton(
-                                  tooltip: 'Gallery',
-                                  onPressed: () =>
-                                      getProfilePicture(ImageSource.gallery),
-                                  icon: const Icon(
-                                    Icons.image,
-                                    size: 42,
-                                  ),
-                                  color: Colors.black,
-                                  highlightColor: Colors.green,
-                                ),
-                                const SizedBox(
-                                  width: 10,
-                                ),
-                                IconButton(
-                                  tooltip: 'Camera',
-                                  onPressed: () =>
-                                      getProfilePicture(ImageSource.camera),
-                                  icon: const Icon(
-                                    Icons.camera_enhance,
-                                    size: 42,
-                                  ),
-                                  highlightColor: Colors.green,
-                                  color: Colors.black,
-                                ),
-                                const SizedBox(
-                                  width: 60,
-                                ),
-                              ],
-                            );
-                          });
-                    }, //getProfilePicture(ImageSource.gallery),
+                    },
                     child: Container(
                       decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(100)),
@@ -256,7 +151,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 keyboardType: TextInputType.name,
                 textAlign: TextAlign.center,
-                onChanged: (String value) async{
+                onChanged: (String value) async {
                   updateUserName(value);
                 },
               ),
@@ -272,7 +167,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 keyboardType: TextInputType.name,
                 textAlign: TextAlign.center,
-                onChanged: (String value) async{
+                onChanged: (String value) async {
                   updateUserSurname(value);
                 },
               ),
@@ -290,7 +185,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 keyboardType: TextInputType.name,
                 textAlign: TextAlign.center,
-                onChanged: (String value) async{
+                onChanged: (String value) async {
                   updateUserNickname(value);
                 },
               ),
@@ -308,21 +203,20 @@ class _ProfilePageState extends State<ProfilePage> {
               children: [
                 ElevatedButton(
                   //creating a button that opens the calender
-                  onPressed: () async{ 
+                  onPressed: () async {
                     DateTime? newDate = await showDatePicker(
                       context: context,
                       initialDate: dateofbirth,
                       firstDate: DateTime(1900), //start is 20th century
-                      lastDate: DateTime(2100), 
+                      lastDate: DateTime(2100),
                     );
 
-
-                    if(newDate == null) return;
+                    if (newDate == null) return;
 
                     setState(() {
                       dateofbirth = newDate;
-                      i= newDate;
-                      updateUserDOB(i.toString());
+                      date = newDate;
+                      updateUserDOB(date.toString());
                     });
 
                     // userDateOfBirth(context);
@@ -408,7 +302,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           setState(() {
                             veganOrNot = value;
                             isVegan = veganOrNot;
-                                 //changing the value if it is switched
+                            //changing the value if it is switched
                           });
                           updateUserVegan(value);
                         }),
@@ -433,15 +327,16 @@ class _ProfilePageState extends State<ProfilePage> {
                           studentOrNot = value;
                           isStudent = studentOrNot;
                         });
-                        updateUserStudent(value);//updating the user student status
+                        updateUserStudent(
+                            value); //updating the user student status
                       }),
                 ],
               ),
             ),
           ],
         ),
-      )
       ),
+    )
     );
   }
 }
